@@ -2,7 +2,6 @@ import com.mpatric.mp3agic.InvalidDataException;
 import com.mpatric.mp3agic.UnsupportedTagException;
 import javazoom.jl.decoder.*;
 import javazoom.jl.player.AudioDevice;
-import javazoom.jl.player.FactoryRegistry;
 import support.PlayerWindow;
 import support.Song;
 
@@ -10,8 +9,18 @@ import javax.swing.event.MouseInputAdapter;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
+import java.io.IOException;
+import java.util.Arrays;
 
 public class Player {
+
+    private static final int SIZE = 1000;
+    private static final int INFO_SIZE = 6;
+
+    //Program name
+    private static final String TITULO_DA_JANELA = "mp3";
+    //playlist with [row][column]
+    private String[][] LISTA_DE_REPRODUÇÃO = new String[SIZE][INFO_SIZE];
 
     /**
      * The MPEG audio bitstream.
@@ -30,15 +39,15 @@ public class Player {
 
     private int currentFrame = 0;
 
-    private final ActionListener buttonListenerPlayNow = e -> ;
-    private final ActionListener buttonListenerRemove = e -> ;
-    private final ActionListener buttonListenerAddSong = e -> ;
-    private final ActionListener buttonListenerPlayPause = e -> ;
-    private final ActionListener buttonListenerStop = e -> ;
-    private final ActionListener buttonListenerNext = e -> ;
-    private final ActionListener buttonListenerPrevious = e -> ;
-    private final ActionListener buttonListenerShuffle = e -> ;
-    private final ActionListener buttonListenerLoop = e -> ;
+    private final ActionListener buttonListenerPlayNow = e ->System.out.println(e);
+    private final ActionListener buttonListenerRemove = e ->System.out.println(e) ;
+    private final ActionListener buttonListenerAddSong = e ->addQueue() ;
+    private final ActionListener buttonListenerPlayPause = e ->System.out.println(e) ;
+    private final ActionListener buttonListenerStop = e ->System.out.println(e) ;
+    private final ActionListener buttonListenerNext = e ->System.out.println(e) ;
+    private final ActionListener buttonListenerPrevious = e -> System.out.println(e);
+    private final ActionListener buttonListenerShuffle = e -> System.out.println(e);
+    private final ActionListener buttonListenerLoop = e ->System.out.println(e) ;
     private final MouseInputAdapter scrubberMouseInputAdapter = new MouseInputAdapter() {
         @Override
         public void mouseReleased(MouseEvent e) {
@@ -115,4 +124,29 @@ public class Player {
         }
     }
     //</editor-fold>
+
+    //Add music to playlist
+    public void addQueue(){
+        try{
+            Song song = window.openFileChooser();
+
+            if(song != null){
+                System.arraycopy(song.getDisplayInfo(), 0,LISTA_DE_REPRODUÇÃO[findEmpty()] , 0, INFO_SIZE);
+                window.setQueueList(LISTA_DE_REPRODUÇÃO);
+            }
+
+        }catch (InvalidDataException | BitstreamException | UnsupportedTagException | IOException exception){
+            System.out.println(exception);
+        }
+    }
+
+    //check if the line is empty
+    private int findEmpty(){
+        for(int i = 0; i < SIZE; i++){
+            if(Arrays.equals(LISTA_DE_REPRODUÇÃO[i], new String[INFO_SIZE])){
+                return i;
+            }
+        }
+        return 999;
+    }
 }
