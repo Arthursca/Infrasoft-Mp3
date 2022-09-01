@@ -11,6 +11,7 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Objects;
 
 public class Player {
 
@@ -40,7 +41,7 @@ public class Player {
     private int currentFrame = 0;
 
     private final ActionListener buttonListenerPlayNow = e ->System.out.println(e);
-    private final ActionListener buttonListenerRemove = e ->System.out.println(e) ;
+    private final ActionListener buttonListenerRemove = e ->removeQueue();
     private final ActionListener buttonListenerAddSong = e ->addQueue() ;
     private final ActionListener buttonListenerPlayPause = e ->System.out.println(e) ;
     private final ActionListener buttonListenerStop = e ->System.out.println(e) ;
@@ -140,6 +141,13 @@ public class Player {
         }
     }
 
+    //Remove music from playlist
+    public void removeQueue(){
+        String id = window.getSelectedSong();
+        remove(id);
+        window.setQueueList(LISTA_DE_REPRODUÇÃO);
+    }
+
     //check if the line is empty
     private int findEmpty(){
         for(int i = 0; i < SIZE; i++){
@@ -148,5 +156,13 @@ public class Player {
             }
         }
         return 999;
+    }
+    private void remove(String id){
+        for(int i = 0; i < SIZE; i++){
+            if(Objects.equals(LISTA_DE_REPRODUÇÃO[i][5], id)){
+                LISTA_DE_REPRODUÇÃO[i] = new String[INFO_SIZE];
+                return;
+            }
+        }
     }
 }
