@@ -2,6 +2,7 @@ import com.mpatric.mp3agic.InvalidDataException;
 import com.mpatric.mp3agic.UnsupportedTagException;
 import javazoom.jl.decoder.*;
 import javazoom.jl.player.AudioDevice;
+import javazoom.jl.player.FactoryRegistry;
 import support.PlayerWindow;
 import support.Song;
 
@@ -9,46 +10,88 @@ import javax.swing.event.MouseInputAdapter;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class Player {
 
+    /**
+     * Constants
+     * */
+
+    //Max Playlist Size
     private static final int SIZE = 1000;
+
+    // Info = "Title", "Album", "Artist", "Year", "Length", "Path"
     private static final int INFO_SIZE = 6;
 
-    //Program name
-    private static final String TITULO_DA_JANELA = "mp3";
-    //playlist with [row][column]
+    // Program name
+    private static final String TITULO_DA_JANELA = "Mp3";
+
+    /**
+     * We use two types of list, one to store all the music information (playlist)
+     * and the other to store only the headers (LISTA_DE_REPRODUÇÃO)
+     * */
+
+    // All the music information
+    private Song[] playlist = new Song[SIZE];
+
+    // Only the headers
     private String[][] LISTA_DE_REPRODUÇÃO = new String[SIZE][INFO_SIZE];
+
+    /**
+     * Global Thread variables
+     * */
+
+    public Lock lock = new ReentrantLock();
+    public Condition action = lock.newCondition();
+    public boolean using = false;
+    public boolean pause = false;
 
     /**
      * The MPEG audio bitstream.
      */
+
     private Bitstream bitstream;
     /**
      * The MPEG audio decoder.
      */
+
     private Decoder decoder;
     /**
      * The AudioDevice where audio samples are written to.
      */
+
     private AudioDevice device;
 
     private PlayerWindow window;
 
     private int currentFrame = 0;
 
+
+    /**
+     * Activates the functions by clicking the corresponding button
+     * */
+
     private final ActionListener buttonListenerPlayNow = e ->System.out.println(e);
-    private final ActionListener buttonListenerRemove = e ->removeQueue();
-    private final ActionListener buttonListenerAddSong = e ->addQueue() ;
+    private final ActionListener buttonListenerRemove = e -> System.out.println(e) ;
+    private final ActionListener buttonListenerAddSong = e -> new Thread(new addSongThread()).start() ;
     private final ActionListener buttonListenerPlayPause = e ->System.out.println(e) ;
     private final ActionListener buttonListenerStop = e ->System.out.println(e) ;
     private final ActionListener buttonListenerNext = e ->System.out.println(e) ;
     private final ActionListener buttonListenerPrevious = e -> System.out.println(e);
     private final ActionListener buttonListenerShuffle = e -> System.out.println(e);
     private final ActionListener buttonListenerLoop = e ->System.out.println(e) ;
+
+    /**
+     * Check Mouse Events
+     * */
     private final MouseInputAdapter scrubberMouseInputAdapter = new MouseInputAdapter() {
         @Override
         public void mouseReleased(MouseEvent e) {
@@ -62,6 +105,10 @@ public class Player {
         public void mouseDragged(MouseEvent e) {
         }
     };
+
+    /**
+     * Starts Player
+     * */
 
     public Player() {
         EventQueue.invokeLater(() -> window = new PlayerWindow(
@@ -126,29 +173,56 @@ public class Player {
     }
     //</editor-fold>
 
-    //Add music to playlist
-    public void addQueue(){
+    /**
+     * Thread Functions
+     **/
+
+    // Add music to playlist
+    class addSongThread implements Runnable{
+        public void run(){
+
+            lock.lock();
+            while (using) {
+                try {
+                    action.wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            using = true;
+            addSong();
+            using = false;
+            action.signalAll();
+            lock.unlock();
+
+        }
+    }
+
+
+    /**
+     * Functions inside the Threads
+     * */
+
+    // Add music to playlist
+    public void addSong(){
         try{
             Song song = window.openFileChooser();
-
             if(song != null){
+                playlist[findEmpty()] = song;
                 System.arraycopy(song.getDisplayInfo(), 0,LISTA_DE_REPRODUÇÃO[findEmpty()] , 0, INFO_SIZE);
                 window.setQueueList(LISTA_DE_REPRODUÇÃO);
             }
 
         }catch (InvalidDataException | BitstreamException | UnsupportedTagException | IOException exception){
-            System.out.println(exception);
+            System.out.println(exception.getMessage());
         }
     }
 
-    //Remove music from playlist
-    public void removeQueue(){
-        String id = window.getSelectedSong();
-        remove(id);
-        window.setQueueList(LISTA_DE_REPRODUÇÃO);
-    }
+    /**
+     * Auxiliar Functions
+     * */
 
-    //check if the line is empty
+    // Find the next empty space in the playlist
     private int findEmpty(){
         for(int i = 0; i < SIZE; i++){
             if(Arrays.equals(LISTA_DE_REPRODUÇÃO[i], new String[INFO_SIZE])){
@@ -157,12 +231,5 @@ public class Player {
         }
         return 999;
     }
-    private void remove(String id){
-        for(int i = 0; i < SIZE; i++){
-            if(Objects.equals(LISTA_DE_REPRODUÇÃO[i][5], id)){
-                LISTA_DE_REPRODUÇÃO[i] = new String[INFO_SIZE];
-                return;
-            }
-        }
-    }
+
 }
