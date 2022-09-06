@@ -80,7 +80,7 @@ public class Player {
      * */
 
     private final ActionListener buttonListenerPlayNow = e ->System.out.println(e);
-    private final ActionListener buttonListenerRemove = e -> System.out.println(e) ;
+    private final ActionListener buttonListenerRemove = e -> new Thread(new removeThread()).start() ;
     private final ActionListener buttonListenerAddSong = e -> new Thread(new addSongThread()).start() ;
     private final ActionListener buttonListenerPlayPause = e ->System.out.println(e) ;
     private final ActionListener buttonListenerStop = e ->System.out.println(e) ;
@@ -197,6 +197,26 @@ public class Player {
 
         }
     }
+    //Remove music from playlist
+    class removeThread implements Runnable{
+        public void run(){
+
+            lock.lock();
+            while (using) {
+                try {
+                    action.wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            using = true;
+            remove();
+            using = false;
+            action.signalAll();
+            lock.unlock();
+
+        }
+    }
 
 
     /**
@@ -217,6 +237,12 @@ public class Player {
             System.out.println(exception.getMessage());
         }
     }
+    // Remove music from playlist
+    public void remove(){
+        String id = window.getSelectedSong();
+        removeSong(id);
+        window.setQueueList(LISTA_DE_REPRODUÇÃO);
+    }
 
     /**
      * Auxiliar Functions
@@ -230,6 +256,16 @@ public class Player {
             }
         }
         return 999;
+    }
+    // Remove the song
+    private void removeSong(String id){
+        for(int i = 0; i < SIZE; i++){
+            if(Objects.equals(LISTA_DE_REPRODUÇÃO[i][5], id)){
+                playlist[i] = null;
+                LISTA_DE_REPRODUÇÃO[i] = new String[INFO_SIZE];
+                return;
+            }
+        }
     }
 
 }
