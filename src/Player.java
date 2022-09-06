@@ -79,7 +79,7 @@ public class Player {
      * Activates the functions by clicking the corresponding button
      * */
 
-    private final ActionListener buttonListenerPlayNow = e ->System.out.println(e);
+    private final ActionListener buttonListenerPlayNow = e ->new Thread(new playNowThread()).start();
     private final ActionListener buttonListenerRemove = e -> new Thread(new removeThread()).start() ;
     private final ActionListener buttonListenerAddSong = e -> new Thread(new addSongThread()).start() ;
     private final ActionListener buttonListenerPlayPause = e ->System.out.println(e) ;
@@ -217,6 +217,53 @@ public class Player {
 
         }
     }
+    // Play the selected song
+    class playNowThread implements Runnable {
+        public void run() {
+            try {
+                lock.lock();
+                pause = false;
+                String id = window.getSelectedSong();
+                Song song = getSong(id);
+                playNow();
+                device = FactoryRegistry.systemRegistry().createAudioDevice();
+                device.open(decoder = new Decoder());
+                bitstream = new Bitstream(song.getBufferedInputStream());
+                currentFrame = 0;
+                lock.unlock();
+                while (true ){
+
+                    if(!pause){
+
+                        lock.lock();
+                        while (using) {
+                            try {
+                                action.wait();
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                        using = true;
+
+                        if(!playNextFrame()) break;
+                        window.setTime((int) (currentFrame * song.getMsPerFrame()), (int) song.getMsLength());
+                        currentFrame += 1;
+
+                        using = false;
+                        action.signalAll();
+                        lock.unlock();
+                        TimeUnit.MILLISECONDS.sleep(1);
+                    }
+
+                }
+
+
+            } catch (JavaLayerException | FileNotFoundException | InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+    }
 
 
     /**
@@ -243,6 +290,27 @@ public class Player {
         removeSong(id);
         window.setQueueList(LISTA_DE_REPRODUÇÃO);
     }
+    // Play the selected song
+    public void playNow() {
+
+
+        String id = window.getSelectedSong();
+
+        Song song = getSong(id);
+
+        if (song != null) {
+
+            window.setPlayingSongInfo(song.getTitle(),song.getAlbum(),song.getArtist());
+            window.setEnabledLoopButton(false);
+            window.setEnabledScrubber(true);
+            window.setEnabledNextButton(false);
+            window.setEnabledPlayPauseButton(true);
+            window.setPlayPauseButtonIcon(0);
+            window.setEnabledStopButton(true);
+            window.setEnabledPreviousButton(true);
+            window.setEnabledShuffleButton(true);
+        }
+    }
 
     /**
      * Auxiliar Functions
@@ -266,6 +334,15 @@ public class Player {
                 return;
             }
         }
+    }
+    // Find the song in the playlist
+    private Song getSong(String id){
+        for(int i = 0; i < SIZE; i++){
+            if(Objects.equals(LISTA_DE_REPRODUÇÃO[i][5], id)){
+                return playlist[i];
+            }
+        }
+        return null;
     }
 
 }
