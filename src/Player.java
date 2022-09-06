@@ -82,7 +82,7 @@ public class Player {
     private final ActionListener buttonListenerPlayNow = e ->new Thread(new playNowThread()).start();
     private final ActionListener buttonListenerRemove = e -> new Thread(new removeThread()).start() ;
     private final ActionListener buttonListenerAddSong = e -> new Thread(new addSongThread()).start() ;
-    private final ActionListener buttonListenerPlayPause = e ->System.out.println(e) ;
+    private final ActionListener buttonListenerPlayPause = e ->new Thread(new playPauseThread()).start() ;
     private final ActionListener buttonListenerStop = e ->System.out.println(e) ;
     private final ActionListener buttonListenerNext = e ->System.out.println(e) ;
     private final ActionListener buttonListenerPrevious = e -> System.out.println(e);
@@ -264,6 +264,25 @@ public class Player {
         }
 
     }
+    // Play/Pause the current song
+    class playPauseThread implements Runnable{
+        public void run(){
+
+            lock.lock();
+            while (using) {
+                try {
+                    action.wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            using = true;
+            playPause();
+            using = false;
+            action.signalAll();
+            lock.unlock();
+        }
+    }
 
 
     /**
@@ -309,6 +328,17 @@ public class Player {
             window.setEnabledStopButton(true);
             window.setEnabledPreviousButton(true);
             window.setEnabledShuffleButton(true);
+        }
+    }
+    // Play/Pause the current song
+    public void playPause(){
+        if (pause) {
+            window.setPlayPauseButtonIcon(0);
+            pause = false;
+        }
+        else{
+            window.setPlayPauseButtonIcon(1);
+            pause = true;
         }
     }
 
