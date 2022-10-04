@@ -52,7 +52,11 @@ public class Player {
     public Lock lock = new ReentrantLock();
     public Condition action = lock.newCondition();
     public boolean using = false;
+
+    public boolean playnow = true;
     public boolean pause = false;
+    public boolean next = false;
+    public boolean previous = false;
 
     /**
      * The MPEG audio bitstream.
@@ -74,18 +78,30 @@ public class Player {
 
     private int currentFrame = 0;
 
-
+    Thread playNow = new Thread(new playNowThread());
+    Thread remove = new Thread(new removeThread());
+    Thread addSong = new Thread(new addSongThread());
+    Thread playPause = new Thread(new playPauseThread());
+    Thread stop = new Thread(new stopThread());
+    Thread nextSong = new Thread(new nextThread());
+    Thread previousSong = new Thread(new previousThread());
     /**
      * Activates the functions by clicking the corresponding button
      * */
 
-    private final ActionListener buttonListenerPlayNow = e ->new Thread(new playNowThread()).start();
-    private final ActionListener buttonListenerRemove = e -> new Thread(new removeThread()).start() ;
-    private final ActionListener buttonListenerAddSong = e -> new Thread(new addSongThread()).start() ;
-    private final ActionListener buttonListenerPlayPause = e ->new Thread(new playPauseThread()).start() ;
-    private final ActionListener buttonListenerStop = e ->new Thread(new stopThread()).start() ;
-    private final ActionListener buttonListenerNext = e ->System.out.println(e) ;
-    private final ActionListener buttonListenerPrevious = e -> System.out.println(e);
+    private final ActionListener buttonListenerPlayNow = e -> {
+        try {
+            playNow();
+        } catch (InterruptedException ex) {
+            throw new RuntimeException(ex);
+        }
+    };
+    private final ActionListener buttonListenerRemove = e ->  remove();
+    private final ActionListener buttonListenerAddSong = e ->  addSong();
+    private final ActionListener buttonListenerPlayPause = e -> playPause();
+    private final ActionListener buttonListenerStop = e -> stop();
+    private final ActionListener buttonListenerNext = e -> nextSong();
+    private final ActionListener buttonListenerPrevious = e ->  previousSong();
     private final ActionListener buttonListenerShuffle = e -> System.out.println(e);
     private final ActionListener buttonListenerLoop = e ->System.out.println(e) ;
 
@@ -172,6 +188,56 @@ public class Player {
         }
     }
     //</editor-fold>
+    /**
+     * Inicialize Thread Functions
+     **/
+
+    private void playNow() throws InterruptedException {
+        if (playNow.isAlive()) {
+            playNow.interrupt();
+            TimeUnit.SECONDS.sleep(2);
+        }
+        playNow = new Thread(new playNowThread());
+        playNow.start();
+    }
+
+    private void remove(){
+        if (remove.isAlive()) {
+            remove.interrupt();
+        }
+        remove.run();
+    }
+    private void addSong(){
+        if (addSong.isAlive()) {
+            addSong.interrupt();
+        }
+        addSong.run();
+    }
+    private void playPause(){
+        if (playPause.isAlive()) {
+            playPause.interrupt();
+        }
+        playPause.run();
+    }
+    private void stop(){
+        if (stop.isAlive()) {
+            stop.interrupt();
+        }
+        stop.run();
+    }
+    private void nextSong(){
+        if (nextSong.isAlive()) {
+            nextSong.interrupt();
+        }
+        nextSong.run();
+    }
+    private void previousSong(){
+        if (previousSong.isAlive()) {
+            previousSong.interrupt();
+        }
+        previousSong.run();
+    }
+
 
     /**
      * Thread Functions
@@ -180,8 +246,10 @@ public class Player {
     // Add music to playlist
     class addSongThread implements Runnable{
         public void run(){
+            int id = SIZE;
 
             lock.lock();
+
             while (using) {
                 try {
                     action.wait();
@@ -189,8 +257,27 @@ public class Player {
                     throw new RuntimeException(e);
                 }
             }
+
             using = true;
-            addSong();
+
+            try{
+                Song song = window.openFileChooser();
+                if(song != null){
+                    for(int i = 0; i < SIZE; i++){
+                        if(Arrays.equals(LISTA_DE_REPRODUÇÃO[i], new String[INFO_SIZE])){
+                            id = i;
+                            break;
+                        }
+                    }
+                    playlist[id] = song;
+                    System.arraycopy(song.getDisplayInfo(), 0,LISTA_DE_REPRODUÇÃO[id] , 0, INFO_SIZE);
+                    window.setQueueList(LISTA_DE_REPRODUÇÃO);
+                }
+
+            }catch (InvalidDataException | BitstreamException | UnsupportedTagException | IOException exception){
+                System.out.println(exception.getMessage());
+            }
+
             using = false;
             action.signalAll();
             lock.unlock();
@@ -210,7 +297,20 @@ public class Player {
                 }
             }
             using = true;
-            remove();
+            String id = window.getSelectedSong();
+
+            //change the location of all songs below the removed one
+            for(int i = 0; i < SIZE; i++){
+                if(Objects.equals(LISTA_DE_REPRODUÇÃO[i][5], id)){
+                    playlist[i] = null;
+                    System.arraycopy(new String[INFO_SIZE], 0 , LISTA_DE_REPRODUÇÃO[i], 0, INFO_SIZE);
+                    for(int j = i; j < SIZE - 1; j++){
+                        System.arraycopy(LISTA_DE_REPRODUÇÃO[j + 1], 0 , LISTA_DE_REPRODUÇÃO[j], 0, INFO_SIZE);
+                        playlist[j] = playlist[j + 1];
+                    }
+                }
+            }
+            window.setQueueList(LISTA_DE_REPRODUÇÃO);
             using = false;
             action.signalAll();
             lock.unlock();
@@ -219,22 +319,46 @@ public class Player {
     }
     // Play the selected song
     class playNowThread implements Runnable {
+        boolean loop = true;
+
         public void run() {
             try {
+                //get the song
                 lock.lock();
+                while (using) {
+                    try {
+                        action.wait();
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                using = true;
                 pause = false;
+
+
                 String id = window.getSelectedSong();
                 Song song = getSong(id);
-                playNow();
+                if (song != null) {
+                    window.setPlayingSongInfo(song.getTitle(),song.getAlbum(),song.getArtist());
+                    window.setEnabledLoopButton(true);
+                    window.setEnabledScrubber(true);
+                    window.setEnabledNextButton(true);
+                    window.setEnabledPlayPauseButton(true);
+                    window.setPlayPauseButtonIcon(1);
+                    window.setEnabledStopButton(true);
+                    window.setEnabledPreviousButton(true);
+                    window.setEnabledShuffleButton(true);
+                }
                 device = FactoryRegistry.systemRegistry().createAudioDevice();
                 device.open(decoder = new Decoder());
                 bitstream = new Bitstream(song.getBufferedInputStream());
                 currentFrame = 0;
+                using = false;
+                action.signalAll();
                 lock.unlock();
-                while (true ){
 
-                    if(!pause){
-
+                //play the song
+                while (loop ){
                         lock.lock();
                         while (using) {
                             try {
@@ -244,22 +368,142 @@ public class Player {
                             }
                         }
                         using = true;
+                        String nextId = null;
+                        String previousId = null;
 
-                        if(!playNextFrame()) break;
-                        window.setTime((int) (currentFrame * song.getMsPerFrame()), (int) song.getMsLength());
-                        currentFrame += 1;
+                        //get next
+                        for(int i = 0; i < SIZE - 1; i++){
+                            if(Objects.equals(LISTA_DE_REPRODUÇÃO[i][5], id)){
+                                if (i >= SIZE){
+                                    nextId = null;
+                                    break;
+                                }
+                                nextId =  LISTA_DE_REPRODUÇÃO[i + 1][5];
+                                break;
+                            }
+                        }
 
-                        using = false;
-                        action.signalAll();
-                        lock.unlock();
-                        TimeUnit.MILLISECONDS.sleep(1);
+                        //get previous
+                        for(int i = 0; i < SIZE; i++){
+                            if(Objects.equals(LISTA_DE_REPRODUÇÃO[i][5], id)){
+                                if (i == 0){
+                                    previousId = null;
+                                    break;
+                                }
+                                previousId =  LISTA_DE_REPRODUÇÃO[i - 1][5];
+                                break;
+                            }
+                        }
+
+                    //change for the next song
+                        if(nextId != null){
+                            window.setEnabledNextButton(true);
+                            if(next){
+                                next = false;
+                                id = nextId;
+                                song = getSong(id);
+
+                                if (song != null) {
+                                    window.setPlayingSongInfo(song.getTitle(),song.getAlbum(),song.getArtist());
+                                    window.setEnabledLoopButton(true);
+                                    window.setEnabledScrubber(true);
+                                    window.setEnabledNextButton(true);
+                                    window.setEnabledPlayPauseButton(true);
+                                    window.setPlayPauseButtonIcon(1);
+                                    window.setEnabledStopButton(true);
+                                    window.setEnabledPreviousButton(true);
+                                    window.setEnabledShuffleButton(true);
+                                }
+
+
+                                device = FactoryRegistry.systemRegistry().createAudioDevice();
+                                device.open(decoder = new Decoder());
+                                bitstream = new Bitstream(song.getBufferedInputStream());
+                                currentFrame = 0;
+                                window.setTime((int) (currentFrame * song.getMsPerFrame()), (int) song.getMsLength());
+                            }
+                        }else
+                        {
+                            window.setEnabledNextButton(false);
+                        }
+
+
+                        //change for the previous song
+                        if(previousId != null){
+                            window.setEnabledPreviousButton(true);
+                            if(previous) {
+                                previous = false;
+                                id = previousId;
+                                song = getSong(id);
+
+
+                                if (song != null) {
+                                    window.setPlayingSongInfo(song.getTitle(),song.getAlbum(),song.getArtist());
+                                    window.setEnabledLoopButton(true);
+                                    window.setEnabledScrubber(true);
+                                    window.setEnabledNextButton(true);
+                                    window.setEnabledPlayPauseButton(true);
+                                    window.setPlayPauseButtonIcon(1);
+                                    window.setEnabledStopButton(true);
+                                    window.setEnabledPreviousButton(true);
+                                    window.setEnabledShuffleButton(true);
+                                }
+
+
+                                device = FactoryRegistry.systemRegistry().createAudioDevice();
+                                device.open(decoder = new Decoder());
+                                bitstream = new Bitstream(song.getBufferedInputStream());
+                                currentFrame = 0;
+                                window.setTime((int) (currentFrame * song.getMsPerFrame()), (int) song.getMsLength());
+                            }
+                        } else {
+                            window.setEnabledPreviousButton(false);
+                        }
+                  //  System.out.println(window.getScrubberValue() + " " + currentFrame );
+                    //play the next song when the current one ends
+                    if(!pause){
+                        if(!playNextFrame()) {
+                            next = false;
+                            id = nextId;
+                            if(nextId != null){
+                                song = getSong(id);
+
+
+                                if (song != null) {
+                                    window.setPlayingSongInfo(song.getTitle(),song.getAlbum(),song.getArtist());
+                                    window.setEnabledLoopButton(true);
+                                    window.setEnabledScrubber(true);
+                                    window.setEnabledNextButton(true);
+                                    window.setEnabledPlayPauseButton(true);
+                                    window.setPlayPauseButtonIcon(1);
+                                    window.setEnabledStopButton(true);
+                                    window.setEnabledPreviousButton(true);
+                                    window.setEnabledShuffleButton(true);
+                                }
+
+                                device = FactoryRegistry.systemRegistry().createAudioDevice();
+                                device.open(decoder = new Decoder());
+                                bitstream = new Bitstream(song.getBufferedInputStream());
+                                currentFrame = 0;
+                            }
+                        }
+                        window.setTime( currentFrame, (int) song.getMsLength());
                     }
+                    currentFrame = window.getScrubberValue()  + (int) (song.getMsPerFrame());
+                    
 
+
+
+
+                    using = false;
+                    action.signalAll();
+                    lock.unlock();
+                    TimeUnit.MILLISECONDS.sleep(10);
                 }
 
 
-            } catch (JavaLayerException | FileNotFoundException | InterruptedException e) {
-                throw new RuntimeException(e);
+            } catch (JavaLayerException | FileNotFoundException | InterruptedException ignored) {
+
             }
         }
 
@@ -277,7 +521,14 @@ public class Player {
                 }
             }
             using = true;
-            playPause();
+            if (pause) {
+                window.setPlayPauseButtonIcon(1);
+                pause = false;
+            }
+            else{
+                window.setPlayPauseButtonIcon(0);
+                pause = true;
+            }
             using = false;
             action.signalAll();
             lock.unlock();
@@ -296,101 +547,59 @@ public class Player {
                 }
             }
             using = true;
-            stop();
+            device = null;
+            bitstream = null;
+            window.resetMiniPlayer();
+            currentFrame = 0;
+            pause = true;
+            using = false;
+            action.signalAll();
+            lock.unlock();
+        }
+    }
+    // Change for the previous song
+    class previousThread implements Runnable{
+        public void run(){
+
+            lock.lock();
+            while (using) {
+                try {
+                    action.wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            using = true;
+            previous = true;
+            using = false;
+            action.signalAll();
+            lock.unlock();
+        }
+    }
+    // Change for the next song
+    class nextThread implements Runnable{
+        public void run(){
+            lock.lock();
+            while (using) {
+                try {
+                    action.wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            using = true;
+            next = true;
             using = false;
             action.signalAll();
             lock.unlock();
         }
     }
 
-    /**
-     * Functions inside the Threads
-     * */
-
-    // Add music to playlist
-    public void addSong(){
-        try{
-            Song song = window.openFileChooser();
-            if(song != null){
-                playlist[findEmpty()] = song;
-                System.arraycopy(song.getDisplayInfo(), 0,LISTA_DE_REPRODUÇÃO[findEmpty()] , 0, INFO_SIZE);
-                window.setQueueList(LISTA_DE_REPRODUÇÃO);
-            }
-
-        }catch (InvalidDataException | BitstreamException | UnsupportedTagException | IOException exception){
-            System.out.println(exception.getMessage());
-        }
-    }
-    // Remove music from playlist
-    public void remove(){
-        String id = window.getSelectedSong();
-        removeSong(id);
-        window.setQueueList(LISTA_DE_REPRODUÇÃO);
-    }
-    // Play the selected song
-    public void playNow() {
-
-
-        String id = window.getSelectedSong();
-
-        Song song = getSong(id);
-
-        if (song != null) {
-
-            window.setPlayingSongInfo(song.getTitle(),song.getAlbum(),song.getArtist());
-            window.setEnabledLoopButton(false);
-            window.setEnabledScrubber(true);
-            window.setEnabledNextButton(false);
-            window.setEnabledPlayPauseButton(true);
-            window.setPlayPauseButtonIcon(0);
-            window.setEnabledStopButton(true);
-            window.setEnabledPreviousButton(true);
-            window.setEnabledShuffleButton(true);
-        }
-    }
-    // Play/Pause the current song
-    public void playPause(){
-        if (pause) {
-            window.setPlayPauseButtonIcon(0);
-            pause = false;
-        }
-        else{
-            window.setPlayPauseButtonIcon(1);
-            pause = true;
-        }
-    }
-    // Stop the current song
-    public void stop(){
-        device = null;
-        bitstream = null;
-        window.resetMiniPlayer();
-        currentFrame = 0;
-        pause = true;
-    }
 
     /**
      * Auxiliar Functions
      * */
 
-    // Find the next empty space in the playlist
-    private int findEmpty(){
-        for(int i = 0; i < SIZE; i++){
-            if(Arrays.equals(LISTA_DE_REPRODUÇÃO[i], new String[INFO_SIZE])){
-                return i;
-            }
-        }
-        return 999;
-    }
-    // Remove the song
-    private void removeSong(String id){
-        for(int i = 0; i < SIZE; i++){
-            if(Objects.equals(LISTA_DE_REPRODUÇÃO[i][5], id)){
-                playlist[i] = null;
-                LISTA_DE_REPRODUÇÃO[i] = new String[INFO_SIZE];
-                return;
-            }
-        }
-    }
     // Find the song in the playlist
     private Song getSong(String id){
         for(int i = 0; i < SIZE; i++){
@@ -400,5 +609,4 @@ public class Player {
         }
         return null;
     }
-
 }
