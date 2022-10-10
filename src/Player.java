@@ -421,6 +421,7 @@ public class Player {
                                 bitstream = new Bitstream(song.getBufferedInputStream());
                                 currentFrame = 0;
                                 window.setTime((int) (currentFrame * song.getMsPerFrame()), (int) song.getMsLength());
+
                             }
                         }else
                         {
@@ -461,6 +462,8 @@ public class Player {
                         }
                   //  System.out.println(window.getScrubberValue() + " " + currentFrame );
                     //play the next song when the current one ends
+
+                    
                     if(!pause){
                         if(!playNextFrame()) {
                             next = false;
@@ -487,10 +490,22 @@ public class Player {
                                 currentFrame = 0;
                             }
                         }
-                        window.setTime( currentFrame, (int) song.getMsLength());
+
+                        currentFrame += 1;
                     }
-                    currentFrame = window.getScrubberValue()  + (int) (song.getMsPerFrame());
-                    
+                    int time = (window.getScrubberValue());
+                    int frame = (int)(time/song.getMsPerFrame());
+                    if(currentFrame < frame + 1 ){
+                        skipToFrame(frame);
+                        currentFrame = frame;}
+                    window.setTime((int) (currentFrame * song.getMsPerFrame()), (int) song.getMsLength());
+
+
+
+
+
+
+
 
 
 
