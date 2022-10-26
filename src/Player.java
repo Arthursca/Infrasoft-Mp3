@@ -12,8 +12,7 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -45,6 +44,8 @@ public class Player {
     // Only the headers
     private String[][] LISTA_DE_REPRODUÇÃO = new String[SIZE][INFO_SIZE];
 
+    private String[][] RAND_LISTA_DE_REPRODUÇÃO = new String[SIZE][INFO_SIZE];
+
     /**
      * Global Thread variables
      * */
@@ -53,10 +54,11 @@ public class Player {
     public Condition action = lock.newCondition();
     public boolean using = false;
 
-    public boolean playnow = true;
+    public boolean loop = false;
     public boolean pause = false;
     public boolean next = false;
     public boolean previous = false;
+    public boolean random = false;
 
     /**
      * The MPEG audio bitstream.
@@ -85,6 +87,8 @@ public class Player {
     Thread stop = new Thread(new stopThread());
     Thread nextSong = new Thread(new nextThread());
     Thread previousSong = new Thread(new previousThread());
+    Thread loopSong = new Thread(new loopThread());
+    Thread randomSong = new Thread(new randomThread());
     /**
      * Activates the functions by clicking the corresponding button
      * */
@@ -102,8 +106,8 @@ public class Player {
     private final ActionListener buttonListenerStop = e -> stop();
     private final ActionListener buttonListenerNext = e -> nextSong();
     private final ActionListener buttonListenerPrevious = e ->  previousSong();
-    private final ActionListener buttonListenerShuffle = e -> System.out.println(e);
-    private final ActionListener buttonListenerLoop = e ->System.out.println(e) ;
+    private final ActionListener buttonListenerShuffle = e -> randomSong();
+    private final ActionListener buttonListenerLoop = e -> loopSong();
 
     /**
      * Check Mouse Events
@@ -237,6 +241,19 @@ public class Player {
         }
         previousSong.run();
     }
+    private void loopSong() {
+        if (loopSong.isAlive()) {
+            loopSong.interrupt();
+        }
+        loopSong.run();
+    }
+
+    private void randomSong(){
+        if (randomSong.isAlive()) {
+            randomSong.interrupt();
+        }
+        randomSong.run();
+    }
 
 
     /**
@@ -319,7 +336,6 @@ public class Player {
     }
     // Play the selected song
     class playNowThread implements Runnable {
-        boolean loop = true;
 
         public void run() {
             try {
@@ -358,7 +374,7 @@ public class Player {
                 lock.unlock();
 
                 //play the song
-                while (loop ){
+                while (true){
                         lock.lock();
                         while (using) {
                             try {
@@ -374,10 +390,17 @@ public class Player {
                         //get next
                         for(int i = 0; i < SIZE - 1; i++){
                             if(Objects.equals(LISTA_DE_REPRODUÇÃO[i][5], id)){
-                                if (i >= SIZE){
-                                    nextId = null;
-                                    break;
+                                if (LISTA_DE_REPRODUÇÃO[i + 1][5] == null ){
+                                    if(loop){
+                                        nextId = LISTA_DE_REPRODUÇÃO[0][5];
+                                        break;
+                                    }
+                                    else{
+                                        nextId = null;
+                                        break;
+                                    }
                                 }
+
                                 nextId =  LISTA_DE_REPRODUÇÃO[i + 1][5];
                                 break;
                             }
@@ -403,7 +426,7 @@ public class Player {
                                 id = nextId;
                                 song = getSong(id);
 
-                                if (song != null) {
+                                if (song != null ) {
                                     window.setPlayingSongInfo(song.getTitle(),song.getAlbum(),song.getArtist());
                                     window.setEnabledLoopButton(true);
                                     window.setEnabledScrubber(true);
@@ -462,16 +485,12 @@ public class Player {
                         }
                   //  System.out.println(window.getScrubberValue() + " " + currentFrame );
                     //play the next song when the current one ends
-
-                    
                     if(!pause){
                         if(!playNextFrame()) {
                             next = false;
                             id = nextId;
+                            song = getSong(id);
                             if(nextId != null){
-                                song = getSong(id);
-
-
                                 if (song != null) {
                                     window.setPlayingSongInfo(song.getTitle(),song.getAlbum(),song.getArtist());
                                     window.setEnabledLoopButton(true);
@@ -499,16 +518,6 @@ public class Player {
                         skipToFrame(frame);
                         currentFrame = frame;}
                     window.setTime((int) (currentFrame * song.getMsPerFrame()), (int) song.getMsLength());
-
-
-
-
-
-
-
-
-
-
 
                     using = false;
                     action.signalAll();
@@ -610,6 +619,69 @@ public class Player {
         }
     }
 
+    class loopThread implements Runnable{
+        public void run(){
+            lock.lock();
+            while (using) {
+                try {
+                    action.wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            using = true;
+            if (loop){
+                loop = false;
+                window.setEnabledLoopButton(true);
+            }
+            else {
+                loop = true;
+                window.setEnabledLoopButton(true);
+            }
+            using = false;
+            action.signalAll();
+            lock.unlock();
+        }
+    }
+
+    class randomThread implements Runnable{
+        public void run(){
+            lock.lock();
+            while (using) {
+                try {
+                    action.wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            using = true;
+            if (random){
+                for(int i = 0; i < SIZE; i++){
+                    System.arraycopy(RAND_LISTA_DE_REPRODUÇÃO[i], 0,LISTA_DE_REPRODUÇÃO[i] , 0, INFO_SIZE);
+                }
+                random = false;
+            }
+            else {
+                int counter = 0;
+                ArrayList<Integer> aux = new ArrayList<>();
+                for(int i = 0; i < SIZE; i++){
+                    aux.add(i);
+                    System.arraycopy(LISTA_DE_REPRODUÇÃO[i], 0,RAND_LISTA_DE_REPRODUÇÃO[i] , 0, INFO_SIZE);
+                }
+                Collections.shuffle(aux);
+                for(int i = 0; i < SIZE; i++){
+                    if(RAND_LISTA_DE_REPRODUÇÃO[aux.get(i)][0] != null){
+                        System.arraycopy(RAND_LISTA_DE_REPRODUÇÃO[aux.get(i)],0,LISTA_DE_REPRODUÇÃO[counter++],0,INFO_SIZE);
+                    }
+                }
+                random = true;
+            }
+            window.setQueueList(LISTA_DE_REPRODUÇÃO);
+            using = false;
+            action.signalAll();
+            lock.unlock();
+        }
+    }
 
     /**
      * Auxiliar Functions
